@@ -6,7 +6,6 @@ from collections import defaultdict
 REPORT = defaultdict(list)
 COLLECTIONS = set()
 
-# MongoDB CRUD method mapping
 MONGO_WRITE_METHODS = {
     "insert_one": "INSERT",
     "insert_many": "INSERT",
@@ -25,13 +24,12 @@ class MongoVisitor(ast.NodeVisitor):
     def visit_Call(self, node):
         if isinstance(node.func, ast.Attribute):
             method = node.func.attr
-
             if method in MONGO_WRITE_METHODS:
                 op_type = MONGO_WRITE_METHODS[method]
                 fields = set()
                 dynamic = False
 
-                # Detect collection name (best effort)
+                # Detect collection name
                 coll_name = "<unknown>"
                 if isinstance(node.func.value, ast.Attribute):
                     coll_name = node.func.value.attr
@@ -42,12 +40,11 @@ class MongoVisitor(ast.NodeVisitor):
                         coll_name = "<dynamic>"
                 COLLECTIONS.add(coll_name)
 
-                # Scan arguments
+                # Scan arguments for fields
                 for arg in node.args:
                     if isinstance(arg, ast.Dict):
                         for k, v in zip(arg.keys, arg.values):
                             if isinstance(k, ast.Constant):
-                                # Check for Mongo operators
                                 if isinstance(v, ast.Dict) and k.value in {
                                     "$set", "$unset", "$push", "$addToSet", "$rename"
                                 }:
@@ -79,7 +76,6 @@ def scan(file):
         tree = ast.parse(Path(file).read_text())
         MongoVisitor(file).visit(tree)
     except Exception:
-        # Skip unparseable files
         pass
 
 
@@ -91,7 +87,6 @@ if __name__ == "__main__":
     if not REPORT and not COLLECTIONS:
         sys.exit(0)
 
-    # Generate PR comment report
     with open("mongo_crud_report.md", "w") as f:
         f.write("## 🔍 MongoDB CRUD Activity Detected (Manual GDPR Review Required)\n\n")
 
@@ -104,13 +99,14 @@ if __name__ == "__main__":
         for op, entries in REPORT.items():
             f.write(f"### {op}\n")
             for e in entries:
+                severity = "⚠️ dynamic" if e['dynamic'] or e['collection'] == "<dynamic>" else "✅ static"
                 f.write(
                     f"- `{e['file']}:{e['line']}` → "
                     f"Collection: `{e['collection']}`, "
-                    f"Fields: {', '.join(e['fields']) if e['fields'] else '<none>'}"
-                    f"{' ⚠️ dynamic' if e['dynamic'] else ''}\n"
+                    f"Fields: {', '.join(e['fields']) if e['fields'] else '<none>'} "
+                    f"{severity}\n"
                 )
             f.write("\n")
 
-    # ❌ Block merge if any CRUD activity detected
+    # Block merge on any CRUD activity
     sys.exit(1)
