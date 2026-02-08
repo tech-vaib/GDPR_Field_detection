@@ -45,12 +45,30 @@ jobs:
           script: |
             const fs = require('fs');
             if (!fs.existsSync('mongo_crud_report.md')) return;
+            const reportBody = fs.readFileSync('mongo_crud_report.md', 'utf8');
 
-            const body = fs.readFileSync('mongo_crud_report.md', 'utf8');
-
+            // Create or update PR comment
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body
+              body: reportBody
             });
+
+            // Set PR label based on severity
+            const reportText = reportBody.toLowerCase();
+            const labels = [];
+            if (reportText.includes('⚠️ dynamic')) {
+              labels.push('mongo-dynamic')
+            }
+            if (reportText.includes('collection: `<dynamic>`')) {
+              labels.push('mongo-dynamic-collection')
+            }
+            if (labels.length > 0) {
+              github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels
+              });
+            }
