@@ -1,0 +1,41 @@
+{
+  "_id": "uuid",
+  "schemaVersion": 1,
+  "email": "user@example.com",
+  "profile": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "preferences": {
+      "language": "en",
+      "timezone": "UTC"
+    }
+  },
+  "addresses": [
+    {
+      "type": "HOME",
+      "city": "Berlin",
+      "country": "DE",
+      "postalCode": "10115"
+    }
+  ],
+  "events": [
+    {
+      "type": "LOGIN",
+      "timestamp": "2024-01-01T10:00:00Z",
+      "metadata": {
+        "ip": "1.2.3.4",
+        "device": "mobile"
+      }
+    }
+  ],
+  "tags": ["vip", "newsletter"],
+  "consents": {
+    "marketing": true,
+    "analytics": false
+  },
+  "extensions": {
+    "anyFutureKey": "anyFutureValue"
+  },
+  "createdAt": "2024-01-01T10:00:00Z",
+  "updatedAt": "2024-01-10T12:00:00Z"
+}
