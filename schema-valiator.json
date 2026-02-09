@@ -1,0 +1,137 @@
+db.runCommand({
+  collMod: "customers",
+
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+
+      // =========================
+      // TOP-LEVEL ALLOW LIST
+      // =========================
+      properties: {
+
+        // -------------------------
+        // Versioning (optional)
+        // -------------------------
+        schemaVersion: {
+          bsonType: "int",
+          description: "Schema version"
+        },
+
+        // -------------------------
+        // Core PII fields
+        // -------------------------
+        email: {
+          bsonType: "string",
+          description: "Customer email (PII)"
+        },
+
+        phoneNumber: {
+          bsonType: "string",
+          description: "Customer phone number (PII)"
+        },
+
+        // -------------------------
+        // Nested object (mixed strict + dynamic)
+        // -------------------------
+        profile: {
+          bsonType: "object",
+          properties: {
+            firstName: { bsonType: "string" },
+            lastName: { bsonType: "string" },
+
+            // Dynamic sub-object explicitly allowed
+            preferences: {
+              bsonType: "object",
+              additionalProperties: true
+            }
+          },
+          additionalProperties: true
+        },
+
+        // -------------------------
+        // ARRAY of STRICT OBJECTS
+        // -------------------------
+        addresses: {
+          bsonType: "array",
+          items: {
+            bsonType: "object",
+            properties: {
+              type: { enum: ["HOME", "WORK"] },
+              city: { bsonType: "string" },
+              country: { bsonType: "string" },
+              postalCode: { bsonType: "string" }
+            },
+            additionalProperties: false
+          }
+        },
+
+        // -------------------------
+        // ARRAY of OBJECTS with
+        // DYNAMIC INTERNAL DATA
+        // -------------------------
+        events: {
+          bsonType: "array",
+          items: {
+            bsonType: "object",
+            properties: {
+              type: { bsonType: "string" },
+              timestamp: { bsonType: "date" },
+
+              // Explicitly dynamic payload
+              metadata: {
+                bsonType: "object",
+                additionalProperties: true
+              }
+            },
+            additionalProperties: true
+          }
+        },
+
+        // -------------------------
+        // ARRAY of PRIMITIVES
+        // -------------------------
+        tags: {
+          bsonType: "array",
+          items: { bsonType: "string" }
+        },
+
+        // -------------------------
+        // STRICT OBJECT (NO extras)
+        // -------------------------
+        consents: {
+          bsonType: "object",
+          properties: {
+            marketing: { bsonType: "bool" },
+            analytics: { bsonType: "bool" }
+          },
+          additionalProperties: false
+        },
+
+        // -------------------------
+        // EXPLICIT ESCAPE HATCH
+        // -------------------------
+        extensions: {
+          bsonType: "object",
+          description: "Explicit area for future dynamic fields",
+          additionalProperties: true
+        },
+
+        // -------------------------
+        // Timestamps
+        // -------------------------
+        createdAt: { bsonType: "date" },
+        updatedAt: { bsonType: "date" }
+      },
+
+      // 🚫 NOTHING ELSE ALLOWED
+      additionalProperties: false
+    }
+  },
+
+  // =========================
+  // SAFE ROLLOUT SETTINGS
+  // =========================
+  validationLevel: "moderate",
+  validationAction: "warn"
+})
