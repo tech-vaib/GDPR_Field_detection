@@ -72,3 +72,84 @@ jobs:
                 labels
               });
             }
+      - name: Create Jira ticket for Mongo CRUD changes
+        if: always()
+        env:
+          ATLASSIAN_BASE_URL: ${{ secrets.ATLASSIAN_BASE_URL }}
+          ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
+          ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+          JIRA_ISSUE_TYPE: ${{ secrets.JIRA_ISSUE_TYPE }}
+        run: |
+          if [ ! -f mongo_crud_report.md ]; then
+            echo "No Mongo CRUD report found. Skipping Jira creation."
+            exit 0
+          fi
+
+          REPORT_BODY=$(sed 's/"/\\"/g' mongo_crud_report.md | tr '\n' '\\n')
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "fields": {
+              "project": {
+                "key": "$JIRA_PROJECT_KEY"
+              },
+              "summary": "[GDPR Review] MongoDB CRUD detected in PR #${{ github.event.pull_request.number }}",
+              "description": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "MongoDB CRUD operations were detected and require GDPR review."
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Repository: ${{ github.repository }}"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Pull Request: ${{ github.event.pull_request.html_url }}"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "codeBlock",
+                    "attrs": {
+                      "language": "markdown"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "$REPORT_BODY"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "issuetype": {
+                "name": "$JIRA_ISSUE_TYPE"
+              }
+            }
+          }
+          EOF
+          )
+
+          curl -s -X POST \
+            -u "$ATLASSIAN_EMAIL:$ATLASSIAN_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$ATLASSIAN_BASE_URL/rest/api/3/issue" \
+            --data "$PAYLOAD"
