@@ -1,3 +1,22 @@
+## JIRA CURL
+
+curl -u "your-email@company.com:YOUR_API_TOKEN" \
+  -X GET \
+  "https://yourcompany.atlassian.net/rest/api/3/myself"
+
+curl -X POST \
+  -u "your-email@company.com:YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  "https://yourcompany.atlassian.net/rest/api/3/issue" \
+  --data '{
+    "fields": {
+      "project": { "key": "YOUR_PROJECT_KEY" },
+      "summary": "Test ticket from curl",
+      "issuetype": { "name": "Task" }
+    }
+  }'
+
+
 export ATLASSIAN_BASE_URL="https://yourcompany.atlassian.net"
 export ATLASSIAN_EMAIL="gdpr-bot@yourcompany.com"
 export ATLASSIAN_API_TOKEN="PASTE_TOKEN_HERE"
