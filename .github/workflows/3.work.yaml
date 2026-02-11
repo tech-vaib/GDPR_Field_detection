@@ -1,0 +1,85 @@
+name: Mongo GDPR Write Check
+
+on:
+  pull_request:
+    branches:
+      - dev
+    types: [opened, synchronize, reopened]
+
+jobs:
+  mongo-crud-check:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 🔍 Get changed Python files only
+      - name: Get changed Python files
+        id: changed_files
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '\.py$' || true)
+          
+          if [ -z "$files" ]; then
+            echo "no_python_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "no_python_changes=false" >> $GITHUB_OUTPUT
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$files" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      # 🚀 Run detector
+      - name: Run Mongo CRUD detector
+        id: detector
+        if: steps.changed_files.outputs.no_python_changes == 'false'
+        run: |
+          set +e
+          output=$(python .github/scripts/mongo_crud_detector.py ${{ steps.changed_files.outputs.files }})
+          exit_code=$?
+          echo "$output"
+          
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$output" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          exit 0
+
+      # 💬 Comment on PR if writes detected
+      - name: Comment on PR
+        if: steps.detector.outputs.exit_code == '1'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const report = `${{ steps.detector.outputs.report }}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "🚨 **MongoDB WRITE Operations Detected**\n\n```\n" + report + "\n```"
+            });
+
+      # ❌ Fail job if writes detected
+      - name: Fail if Mongo writes found
+        if: steps.detector.outputs.exit_code == '1'
+        run: |
+          echo "Mongo WRITE operations detected. Failing PR."
+          exit 1
+
+      # ✅ If no python changes
+      - name: No Python changes
+        if: steps.changed_files.outputs.no_python_changes == 'true'
+        run: echo "No Python files changed. Skipping Mongo check."
