@@ -4,6 +4,13 @@ curl -u "your-email@company.com:YOUR_API_TOKEN" \
   -X GET \
   "https://yourcompany.atlassian.net/rest/api/3/myself"
 
+
+curl -X GET \
+  -H "Authorization: Bearer YOUR_PAT_TOKEN" \
+  -H "Content-Type: application/json" \
+  https://your-jira-domain/rest/api/2/myself
+
+
 curl -X POST \
   -u "your-email@company.com:YOUR_API_TOKEN" \
   -H "Content-Type: application/json" \
