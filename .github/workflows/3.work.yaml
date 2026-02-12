@@ -83,3 +83,26 @@ jobs:
       - name: No Python changes
         if: steps.changed_files.outputs.no_python_changes == 'true'
         run: echo "No Python files changed. Skipping Mongo check."
+      
+      # 🎫 Create Jira ticket if writes detected
+      - name: Create Jira Ticket
+        if: steps.detector.outputs.exit_code == '1'
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PR_URL=${{ github.event.pull_request.html_url }}
+          PR_TITLE="${{ github.event.pull_request.title }}"
+
+          REPORT="${{ steps.detector.outputs.report }}"
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.JIRA_PAT }}" \
+            -H "Content-Type: application/json" \
+            "${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue" \
+            --data "{
+              \"fields\": {
+                \"project\": { \"key\": \"${{ secrets.JIRA_PROJECT_KEY }}\" },
+                \"summary\": \"GDPR Mongo Write Detected - PR #${PR_NUMBER}\",
+                \"description\": \"Mongo WRITE operations detected in PR #${PR_NUMBER}.\n\nPR Title: ${PR_TITLE}\nPR URL: ${PR_URL}\n\nDetails:\n${REPORT}\",
+                \"issuetype\": { \"name\": \"${{ secrets.JIRA_ISSUE_TYPE }}\" }
+              }
+            }"
