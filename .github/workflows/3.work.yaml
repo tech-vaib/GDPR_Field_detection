@@ -106,3 +106,24 @@ jobs:
                 \"issuetype\": { \"name\": \"${{ secrets.JIRA_ISSUE_TYPE }}\" }
               }
             }"
+      
+      - name: Create Jira Ticket (Cloud)
+        if: steps.detector.outputs.exit_code == '1'
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PR_URL=${{ github.event.pull_request.html_url }}
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          REPORT="${{ steps.detector.outputs.report }}"
+
+          curl -X POST \
+            -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue" \
+            --data "{
+              \"fields\": {
+                \"project\": { \"key\": \"${{ secrets.JIRA_PROJECT_KEY }}\" },
+                \"summary\": \"GDPR Mongo Write Detected - PR #${PR_NUMBER}\",
+                \"description\": \"Mongo WRITE operations detected in PR #${PR_NUMBER}.\n\nPR URL: ${PR_URL}\n\n${REPORT}\",
+                \"issuetype\": { \"name\": \"${{ secrets.JIRA_ISSUE_TYPE }}\" }
+              }
+            }"
