@@ -1,0 +1,16 @@
+python -m vllm.entrypoints.openai.api_server \
+  --model ./nemotron-8b \
+  --quantization awq \
+  --gpu-memory-utilization 0.9 \
+  --max-model-len 4096 \
+  --host 0.0.0.0 \
+  --port 8000
+
+
+curl http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "./nemotron-8b",
+    "prompt": "Explain what an AI orchestrator does:",
+    "max_tokens": 200
+  }'
