@@ -1,3 +1,27 @@
+GCP:
+g2-standard-8 OR  a2-highgpu-1g
+IAM & Admin → Quotas => NVIDIA L4 GPUs
+Boot Disk
+
+Ubuntu 22.04 LTS
+
+100 GB SSD
+
+sudo apt update
+sudo apt install -y ubuntu-drivers-common
+sudo ubuntu-drivers install
+sudo reboot
+sudo apt install -y nvidia-cuda-toolkit
+pip install vllm
+
+python -m vllm.entrypoints.openai.api_server \
+    --model nvidia/Nemotron-8B \
+    --dtype auto \
+    --gpu-memory-utilization 0.9
+pip install torch transformers accelerate
+
+------------------------------
+
 sudo apt purge -y 'nvidia*'
 sudo rm -rf /etc/modprobe.d/nvidia*
 sudo update-initramfs -u
