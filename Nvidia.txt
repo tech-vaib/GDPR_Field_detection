@@ -6,3 +6,28 @@ sudo reboot
 sudo apt update
 sudo apt install -y nvidia-driver-570-server
 sudo reboot
+
+sudo apt purge -y 'nvidia*'
+sudo rm -rf /etc/modprobe.d/nvidia*
+sudo rm -rf /lib/modules/$(uname -r)/updates/dkms/nvidia*
+sudo update-initramfs -u
+sudo reboot
+
+lsmod | grep nvidia
+
+az vm extension set \
+  --resource-group <your-rg> \
+  --vm-name <your-vm-name> \
+  --name NvidiaGpuDriverLinux \
+  --publisher Microsoft.HpcCompute \
+  --version 1.10
+
+az vm extension delete \
+  --resource-group <your-rg> \
+  --vm-name <your-vm-name> \
+  --name NvidiaGpuDriverLinux
+
+dmesg | grep -i hyperv
+
+uname -r
+
