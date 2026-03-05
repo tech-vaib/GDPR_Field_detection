@@ -1,0 +1,18 @@
+- name: Gather Git Metadata
+  run: |
+    echo "Fetching main branch and tags..."
+    git fetch origin main --tags
+
+    CURRENT_COMMIT=$(git rev-parse HEAD)
+    SHORT_COMMIT=$(git rev-parse --short HEAD)
+    COMMITS_AHEAD=$(git rev-list --count origin/main..HEAD)
+    LATEST_MAIN_TAG=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "no-tag-found")
+
+    echo "Current Commit: $CURRENT_COMMIT"
+    echo "Commits Ahead of main: $COMMITS_AHEAD"
+    echo "Latest Tag on main: $LATEST_MAIN_TAG"
+
+    echo "CURRENT_COMMIT=$CURRENT_COMMIT" >> $GITHUB_ENV
+    echo "SHORT_COMMIT=$SHORT_COMMIT" >> $GITHUB_ENV
+    echo "COMMITS_AHEAD=$COMMITS_AHEAD" >> $GITHUB_ENV
+    echo "LATEST_MAIN_TAG=$LATEST_MAIN_TAG" >> $GITHUB_ENV
