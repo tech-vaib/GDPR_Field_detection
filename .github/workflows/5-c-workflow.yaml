@@ -1,0 +1,155 @@
+name: Mongo GDPR Write Check
+
+on:
+  pull_request:
+    branches:
+      - dev
+    types: [opened, synchronize, reopened]
+
+jobs:
+  mongo-crud-check:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 🔍 Get changed Python files only
+      - name: Get changed Python files
+        id: changed_files
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '\.py$' || true)
+
+          if [ -z "$files" ]; then
+            echo "no_python_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "no_python_changes=false" >> $GITHUB_OUTPUT
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$files" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      # 🚀 Run detector
+      - name: Run Mongo CRUD detector
+        id: detector
+        if: steps.changed_files.outputs.no_python_changes == 'false'
+        run: |
+          set +e
+          # FIX (Bug 8): path and filename must match where you place the script in your repo
+          output=$(python .github/scripts/mongo_crud_detector.py ${{ steps.changed_files.outputs.files }})
+          exit_code=$?
+          echo "$output"
+
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$output" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          exit 0
+
+      # 💬 Comment on PR if writes detected
+      # FIX (Bug 7): Pass report via env var instead of interpolating directly into JS,
+      # which breaks when the report contains backticks or special characters.
+      - name: Comment on PR
+        if: steps.detector.outputs.exit_code == '1'
+        uses: actions/github-script@v7
+        env:
+          REPORT: ${{ steps.detector.outputs.report }}
+        with:
+          script: |
+            const report = process.env.REPORT;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "🚨 **MongoDB WRITE Operations Detected**\n\n```\n" + report + "\n```"
+            });
+
+      # ❌ Fail job if writes detected
+      - name: Fail if Mongo writes found
+        if: steps.detector.outputs.exit_code == '1'
+        run: |
+          echo "Mongo WRITE operations detected. Failing PR."
+          exit 1
+
+      # ✅ If no python changes
+      - name: No Python changes
+        if: steps.changed_files.outputs.no_python_changes == 'true'
+        run: echo "No Python files changed. Skipping Mongo check."
+
+      # 🎫 Create Jira Ticket if writes detected
+      # FIX (Bug 5): Removed the duplicate step — keep ONLY the one that matches your
+      # Jira deployment. Use the "Cloud" block (API v3, email+token) for Jira Cloud,
+      # or the "Server" block (API v2, PAT) for self-hosted Jira Server/Data Center.
+      # The two blocks below are mutually exclusive — delete whichever doesn't apply.
+
+      # --- OPTION A: Jira Cloud (api/3 + email + API token) ---
+      - name: Create Jira Ticket (Cloud)
+        if: steps.detector.outputs.exit_code == '1'
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+          JIRA_ISSUE_TYPE: ${{ secrets.JIRA_ISSUE_TYPE }}
+          REPORT: ${{ steps.detector.outputs.report }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PR_URL=${{ github.event.pull_request.html_url }}
+          PR_TITLE="${{ github.event.pull_request.title }}"
+
+          # FIX (Bug 6): Use jq to safely build JSON — avoids breakage from quotes,
+          # newlines, or special characters in PR titles and report output.
+          PAYLOAD=$(jq -n \
+            --arg project  "$JIRA_PROJECT_KEY" \
+            --arg summary  "GDPR Mongo Write Detected - PR #${PR_NUMBER}" \
+            --arg desc     "Mongo WRITE operations detected in PR #${PR_NUMBER}.\n\nPR Title: ${PR_TITLE}\nPR URL: ${PR_URL}\n\nDetails:\n${REPORT}" \
+            --arg issuetype "$JIRA_ISSUE_TYPE" \
+            '{fields: {project: {key: $project}, summary: $summary, description: $desc, issuetype: {name: $issuetype}}}')
+
+          curl -f -X POST \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${JIRA_BASE_URL}/rest/api/3/issue" \
+            --data "$PAYLOAD"
+
+      # --- OPTION B: Jira Server / Data Center (api/2 + PAT) ---
+      # Uncomment this block and remove Option A if you are on self-hosted Jira.
+      #
+      # - name: Create Jira Ticket (Server)
+      #   if: steps.detector.outputs.exit_code == '1'
+      #   env:
+      #     JIRA_PAT: ${{ secrets.JIRA_PAT }}
+      #     JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+      #     JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+      #     JIRA_ISSUE_TYPE: ${{ secrets.JIRA_ISSUE_TYPE }}
+      #     REPORT: ${{ steps.detector.outputs.report }}
+      #   run: |
+      #     PR_NUMBER=${{ github.event.pull_request.number }}
+      #     PR_URL=${{ github.event.pull_request.html_url }}
+      #     PR_TITLE="${{ github.event.pull_request.title }}"
+      #
+      #     PAYLOAD=$(jq -n \
+      #       --arg project   "$JIRA_PROJECT_KEY" \
+      #       --arg summary   "GDPR Mongo Write Detected - PR #${PR_NUMBER}" \
+      #       --arg desc      "Mongo WRITE operations detected in PR #${PR_NUMBER}.\n\nPR Title: ${PR_TITLE}\nPR URL: ${PR_URL}\n\nDetails:\n${REPORT}" \
+      #       --arg issuetype "$JIRA_ISSUE_TYPE" \
+      #       '{fields: {project: {key: $project}, summary: $summary, description: $desc, issuetype: {name: $issuetype}}}')
+      #
+      #     curl -f -X POST \
+      #       -H "Authorization: Bearer ${JIRA_PAT}" \
+      #       -H "Content-Type: application/json" \
+      #       "${JIRA_BASE_URL}/rest/api/2/issue" \
+      #       --data "$PAYLOAD"
