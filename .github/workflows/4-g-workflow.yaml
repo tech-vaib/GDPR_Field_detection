@@ -1,0 +1,109 @@
+name: Mongo GDPR Write Check
+
+on:
+  pull_request:
+    branches: [dev]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  mongo-crud-check:
+    # ✅ Skip job if PR title starts with "code style " (case-insensitive)
+    if: ${{ !startsWith(toLower(github.event.pull_request.title), 'code style ') }}
+    
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 🔍 Get changed Python files (robust for PRs)
+      - name: Get changed Python files
+        id: changed_files
+        run: |
+          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep '\.py$' || true)
+
+          if [ -z "$files" ]; then
+            echo "no_python_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "no_python_changes=false" >> $GITHUB_OUTPUT
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$files" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      # 🚀 Run detector safely
+      - name: Run Mongo CRUD detector
+        id: detector
+        if: steps.changed_files.outputs.no_python_changes == 'false'
+        run: |
+          set +e
+
+          echo "${{ steps.changed_files.outputs.files }}" | xargs python .github/scripts/mongo_crud_detector.py > report.txt
+          exit_code=$?
+
+          cat report.txt
+
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          cat report.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+
+      # 💬 Comment on PR
+      - name: Comment on PR
+        if: steps.detector.outputs.exit_code == '1'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const report = `${{ steps.detector.outputs.report }}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "🚨 **MongoDB WRITE Operations Detected**\n\n```\n" + report + "\n```"
+            });
+
+      # ❌ Fail job
+      - name: Fail if Mongo writes found
+        if: steps.detector.outputs.exit_code == '1'
+        run: |
+          echo "Mongo WRITE operations detected. Failing PR."
+          exit 1
+
+      # ✅ No Python changes
+      - name: No Python changes
+        if: steps.changed_files.outputs.no_python_changes == 'true'
+        run: echo "No Python files changed. Skipping Mongo check."
+
+      # 🎫 Create Jira ticket
+      - name: Create Jira Ticket
+        if: steps.detector.outputs.exit_code == '1'
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PR_URL=${{ github.event.pull_request.html_url }}
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          REPORT="${{ steps.detector.outputs.report }}"
+
+          curl -X POST \
+            -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue" \
+            --data "{
+              \"fields\": {
+                \"project\": { \"key\": \"${{ secrets.JIRA_PROJECT_KEY }}\" },
+                \"summary\": \"GDPR Mongo Write Detected - PR #${PR_NUMBER}\",
+                \"description\": \"Mongo WRITE operations detected in PR #${PR_NUMBER}.\n\nPR: ${PR_URL}\n\n${REPORT}\",
+                \"issuetype\": { \"name\": \"${{ secrets.JIRA_ISSUE_TYPE }}\" }
+              }
+            }"
