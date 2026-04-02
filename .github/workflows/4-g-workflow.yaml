@@ -47,21 +47,30 @@ jobs:
         id: detector
         if: steps.changed_files.outputs.no_python_changes == 'false'
         run: |
-         
-  set +e
+         - name: Run Mongo CRUD detector
+  id: detector
+  if: steps.changed_files.outputs.no_python_changes == 'false'
+  shell: bash
+  run: |
+    set +e
 
-  echo "${{ steps.changed_files.outputs.files }}" > files.txt
+    # Read files into bash array safely
+    mapfile -t files <<< "${{ steps.changed_files.outputs.files }}"
 
-  python .github/scripts/mongo_crud_detector.py $(cat files.txt) > report.txt
-  exit_code=$?
+    echo "Files detected:"
+    printf '%s\n' "${files[@]}"
 
-  cat report.txt
+    # Run script with proper argument passing
+    python .github/scripts/mongo_crud_detector.py "${files[@]}" > report.txt
+    exit_code=$?
 
-  echo "report<<EOF" >> $GITHUB_OUTPUT
-  cat report.txt >> $GITHUB_OUTPUT
-  echo "EOF" >> $GITHUB_OUTPUT
+    cat report.txt
 
-  echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+    echo "report<<EOF" >> $GITHUB_OUTPUT
+    cat report.txt >> $GITHUB_OUTPUT
+    echo "EOF" >> $GITHUB_OUTPUT
+
+    echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
 
       # 💬 Comment on PR
       - name: Comment on PR
