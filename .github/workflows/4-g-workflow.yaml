@@ -31,8 +31,8 @@ jobs:
       - name: Get changed Python files
         id: changed_files
         run: |
-          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep '\.py$' || true)
-
+          BASE=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          files=$(git diff --name-only $BASE ${{ github.sha }} | grep '\.py$' || true)
           if [ -z "$files" ]; then
             echo "no_python_changes=true" >> $GITHUB_OUTPUT
           else
