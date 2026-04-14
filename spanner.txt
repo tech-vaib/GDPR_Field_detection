@@ -1,0 +1,38 @@
+resource.type="spanner_instance"
+protoPayload.methodName="google.spanner.admin.instance.v1.InstanceAdmin.CreateInstance"
+timestamp>="2026-04-07T00:00:00Z"
+
+protoPayload.methodName="google.spanner.admin.instance.v1.InstanceAdmin.UpdateInstance"
+
+
+
+gcloud logging read \
+'logName:"cloudaudit.googleapis.com" AND timestamp>="-P10D"' \
+--project=YOUR_PROJECT_ID \
+--format='table(timestamp, protoPayload.authenticationInfo.principalEmail, protoPayload.methodName, resource.type)'
+
+gcloud logging read \
+'logName:"cloudaudit.googleapis.com" AND protoPayload.authenticationInfo.principalEmail:* AND timestamp>="-P10D"' \
+--project=YOUR_PROJECT_ID \
+--format='table(timestamp, protoPayload.authenticationInfo.principalEmail, protoPayload.methodName)'
+
+
+gcloud logging read \
+'logName:"cloudaudit.googleapis.com/activity" AND timestamp>="-P10D"' \
+--project=YOUR_PROJECT_ID \
+--format='table(timestamp, protoPayload.authenticationInfo.principalEmail, protoPayload.methodName, resource.labels.project_id)'
+
+
+gcloud logging read \
+'logName:"cloudaudit.googleapis.com" AND timestamp>="-P10D"' \
+--project=YOUR_PROJECT_ID \
+--format='value(protoPayload.authenticationInfo.principalEmail)' \
+| sort | uniq
+
+
+gcloud logging read \
+'resource.type="spanner_instance" AND timestamp>="-P10D"' \
+--project=YOUR_PROJECT_ID \
+--format='table(timestamp, protoPayload.authenticationInfo.principalEmail, protoPayload.methodName)'
+
+--limit=1000
